@@ -1,0 +1,11 @@
+prefix=/usr
+exec_prefix=${prefix}
+libdir=/usr/lib/x86_64-linux-gnu
+includedir=/usr/include
+
+Name: JavaScriptCoreGTK
+Description: Compatibility alias from javascriptcoregtk-4.0 to javascriptcoregtk-4.1
+Version: 2.50.4
+Requires: glib-2.0 gobject-2.0
+Libs: -L${libdir} -ljavascriptcoregtk-4.1
+Cflags: -I${includedir}/webkitgtk-4.1
