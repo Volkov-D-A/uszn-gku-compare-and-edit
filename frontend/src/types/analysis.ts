@@ -36,12 +36,20 @@ export type ServiceChange = {
   serviceKey: string
   vidUsl: string
   nameUsl: string
+  houseAddresses: string[]
+}
+
+export type ServiceRef = {
+  serviceKey: string
+  vidUsl: string
+  nameUsl: string
 }
 
 export type HouseChange = {
   type: "appeared" | "disappeared"
   houseKey: string
   address: string
+  services: ServiceRef[]
 }
 
 export type AccrualAnomaly = {

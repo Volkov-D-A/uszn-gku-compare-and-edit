@@ -32,7 +32,12 @@ function onChange(event: Event) {
 <style scoped>
 .field {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.4rem;
+}
+
+span {
+  color: #7a7a7a;
+  font-size: 0.82rem;
 }
 
 .row {
@@ -42,18 +47,20 @@ function onChange(event: Event) {
 }
 
 input {
-  border: 1px solid #c4c4c4;
-  border-radius: 8px;
+  background: #fbfbfb;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
   min-width: 0;
-  padding: 0.7rem 0.9rem;
+  padding: 0.85rem 1rem;
 }
 
 button {
-  background: #e6dcc5;
-  border: 1px solid #c8b489;
-  border-radius: 8px;
-  color: #3c2d16;
+  background: #f4f4f4;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  color: #1f1f1f;
   cursor: pointer;
+  min-height: 3.25rem;
   padding: 0.7rem 1rem;
 }
 

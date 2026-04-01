@@ -114,6 +114,7 @@ func mapChargeRecord(row map[string]string) (domain.ChargeRecord, error) {
 
 	return domain.ChargeRecord{
 		Postav:   row["POSTAV"],
+		Lshet:    row["LSCHET"],
 		YearS:    row["YEAR_S"],
 		MonthS:   row["MONTH_S"],
 		VidUsl:   row["VID_USL"],

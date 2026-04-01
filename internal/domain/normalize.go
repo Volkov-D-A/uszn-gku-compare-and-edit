@@ -69,3 +69,11 @@ func BuildMonthLabel(record ChargeRecord) string {
 	}
 	return fmt.Sprintf("%s-%s", year, month)
 }
+
+func BuildLineItemKey(record ChargeRecord) string {
+	account := NormalizeText(record.Lshet)
+	if account == "" {
+		account = BuildHouseKey(record)
+	}
+	return account + "::" + BuildServiceKey(record)
+}

@@ -33,13 +33,19 @@ func TestSnapshotsWithFixtureData(t *testing.T) {
 	if report.Summary.AppearedServices != 2 {
 		t.Fatalf("unexpected appeared services: %d", report.Summary.AppearedServices)
 	}
+	if len(report.ServiceChanges) != 2 || len(report.ServiceChanges[0].HouseAddresses) != 1 {
+		t.Fatalf("unexpected service house addresses: %+v", report.ServiceChanges)
+	}
 	if report.Summary.DisappearedServices != 0 {
 		t.Fatalf("unexpected disappeared services: %d", report.Summary.DisappearedServices)
 	}
 	if report.Summary.AppearedHouses != 0 || report.Summary.DisappearedHouses != 0 {
 		t.Fatalf("unexpected house changes: %+v", report.Summary)
 	}
-	if report.Summary.Anomalies != 1 {
+	if report.Summary.Anomalies != 0 {
 		t.Fatalf("unexpected anomalies: %d", report.Summary.Anomalies)
+	}
+	if len(report.Anomalies) != 0 {
+		t.Fatalf("unexpected anomaly details: %+v", report.Anomalies)
 	}
 }

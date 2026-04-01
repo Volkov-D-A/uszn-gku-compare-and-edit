@@ -47,10 +47,11 @@ func Snapshots(prev domain.ProviderSnapshot, curr domain.ProviderSnapshot, setti
 			continue
 		}
 		report.ServiceChanges = append(report.ServiceChanges, domain.ServiceChange{
-			Type:       "appeared",
-			ServiceKey: key,
-			VidUsl:     currSvc.VidUsl,
-			NameUsl:    currSvc.NameUsl,
+			Type:           "appeared",
+			ServiceKey:     key,
+			VidUsl:         currSvc.VidUsl,
+			NameUsl:        currSvc.NameUsl,
+			HouseAddresses: sortedHouseAddresses(currSvc.HouseAddresses),
 		})
 	}
 
@@ -59,10 +60,11 @@ func Snapshots(prev domain.ProviderSnapshot, curr domain.ProviderSnapshot, setti
 			continue
 		}
 		report.ServiceChanges = append(report.ServiceChanges, domain.ServiceChange{
-			Type:       "disappeared",
-			ServiceKey: key,
-			VidUsl:     prevSvc.VidUsl,
-			NameUsl:    prevSvc.NameUsl,
+			Type:           "disappeared",
+			ServiceKey:     key,
+			VidUsl:         prevSvc.VidUsl,
+			NameUsl:        prevSvc.NameUsl,
+			HouseAddresses: sortedHouseAddresses(prevSvc.HouseAddresses),
 		})
 	}
 
@@ -74,6 +76,7 @@ func Snapshots(prev domain.ProviderSnapshot, curr domain.ProviderSnapshot, setti
 			Type:     "appeared",
 			HouseKey: key,
 			Address:  currHouse.Address,
+			Services: sortedServices(currHouse.Services),
 		})
 	}
 
@@ -85,17 +88,25 @@ func Snapshots(prev domain.ProviderSnapshot, curr domain.ProviderSnapshot, setti
 			Type:     "disappeared",
 			HouseKey: key,
 			Address:  prevHouse.Address,
+			Services: sortedServices(prevHouse.Services),
 		})
 	}
 
 	threshold := math.Abs(settings.AmountChangePercent)
-	for key, prevSvc := range prev.Services {
-		currSvc, ok := curr.Services[key]
-		if !ok {
+	lineKeys := make(map[string]struct{}, len(prev.LineItems)+len(curr.LineItems))
+	for key := range prev.LineItems {
+		lineKeys[key] = struct{}{}
+	}
+	for key := range curr.LineItems {
+		lineKeys[key] = struct{}{}
+	}
+	for key := range lineKeys {
+		prevLine, prevOK := prev.LineItems[key]
+		currLine, currOK := curr.LineItems[key]
+		if !prevOK || !currOK {
 			continue
 		}
-		if anomaly, ok := buildAnomaly(prevSvc, currSvc, threshold); ok {
-			anomaly.ServiceKey = key
+		if anomaly, ok := buildLineAnomaly(key, prevLine, prevOK, currLine, currOK, threshold); ok {
 			report.Anomalies = append(report.Anomalies, anomaly)
 		}
 	}
@@ -106,34 +117,38 @@ func Snapshots(prev domain.ProviderSnapshot, curr domain.ProviderSnapshot, setti
 	return report
 }
 
-func buildAnomaly(prev domain.ServiceAggregate, curr domain.ServiceAggregate, threshold float64) (domain.AccrualAnomaly, bool) {
-	deltaAmount := curr.TotalAccrual - prev.TotalAccrual
-	if prev.TotalAccrual == 0 {
-		if curr.TotalAccrual == 0 {
-			return domain.AccrualAnomaly{}, false
-		}
-		return domain.AccrualAnomaly{
-			VidUsl:           curr.VidUsl,
-			NameUsl:          curr.NameUsl,
-			PreviousAmount:   prev.TotalAccrual,
-			CurrentAmount:    curr.TotalAccrual,
-			DeltaAmount:      deltaAmount,
-			DeltaPercent:     nil,
-			ThresholdPercent: threshold,
-		}, true
+func buildLineAnomaly(lineKey string, prev domain.LineItemAggregate, prevOK bool, curr domain.LineItemAggregate, currOK bool, threshold float64) (domain.AccrualAnomaly, bool) {
+	if !prevOK || !currOK {
+		return domain.AccrualAnomaly{}, false
 	}
 
-	deltaPercent := math.Abs(deltaAmount / prev.TotalAccrual * 100)
+	prevAmount := 0.0
+	currAmount := 0.0
+	base := curr
+	if prevOK {
+		prevAmount = prev.TotalAccrual
+	}
+	if currOK {
+		currAmount = curr.TotalAccrual
+	}
+
+	if prevAmount == 0 || currAmount == 0 {
+		return domain.AccrualAnomaly{}, false
+	}
+
+	deltaPercent := math.Abs((currAmount - prevAmount) / prevAmount * 100)
 	if deltaPercent < threshold {
 		return domain.AccrualAnomaly{}, false
 	}
 
 	return domain.AccrualAnomaly{
-		VidUsl:           curr.VidUsl,
-		NameUsl:          curr.NameUsl,
-		PreviousAmount:   prev.TotalAccrual,
-		CurrentAmount:    curr.TotalAccrual,
-		DeltaAmount:      deltaAmount,
+		LineKey:          lineKey,
+		ServiceKey:       base.ServiceKey,
+		Address:          base.Address,
+		VidUsl:           base.VidUsl,
+		NameUsl:          base.NameUsl,
+		PreviousAmount:   prevAmount,
+		CurrentAmount:    currAmount,
 		DeltaPercent:     &deltaPercent,
 		ThresholdPercent: threshold,
 	}, true
@@ -179,8 +194,37 @@ func sortReport(report *domain.AnalysisReport) {
 		return compareStrings(a.Address, b.Address)
 	})
 	slices.SortFunc(report.Anomalies, func(a, b domain.AccrualAnomaly) int {
+		if a.Address != b.Address {
+			return compareStrings(a.Address, b.Address)
+		}
 		return compareStrings(a.ServiceKey, b.ServiceKey)
 	})
+}
+
+func sortedHouseAddresses(addresses map[string]string) []string {
+	if len(addresses) == 0 {
+		return []string{}
+	}
+	values := make([]string, 0, len(addresses))
+	for _, address := range addresses {
+		values = append(values, address)
+	}
+	slices.Sort(values)
+	return values
+}
+
+func sortedServices(services map[string]domain.ServiceRef) []domain.ServiceRef {
+	if len(services) == 0 {
+		return []domain.ServiceRef{}
+	}
+	values := make([]domain.ServiceRef, 0, len(services))
+	for _, service := range services {
+		values = append(values, service)
+	}
+	slices.SortFunc(values, func(a, b domain.ServiceRef) int {
+		return compareStrings(a.ServiceKey, b.ServiceKey)
+	})
+	return values
 }
 
 func compareStrings(a, b string) int {

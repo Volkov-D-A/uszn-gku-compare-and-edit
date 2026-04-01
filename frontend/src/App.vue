@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from "vue"
+import { ref } from "vue"
 import AnalysisSettings from "./components/AnalysisSettings.vue"
-import DetailsSection from "./components/DetailsSection.vue"
 import FilePicker from "./components/FilePicker.vue"
 import SummaryCards from "./components/SummaryCards.vue"
 import {
@@ -14,7 +13,6 @@ import type { AnalysisReport } from "./types/analysis"
 
 const previousPath = ref("")
 const currentPath = ref("")
-const exportPath = ref("")
 const threshold = ref(20)
 
 const report = ref<AnalysisReport | null>(null)
@@ -37,9 +35,6 @@ async function runAnalysis() {
     report.value = await analyzeSupplierFiles(previousPath.value, currentPath.value, {
       amountChangePercent: threshold.value,
     })
-    if (!exportPath.value.trim()) {
-      exportPath.value = currentPath.value.replace(/\.dbf$/i, "_analysis.xlsx")
-    }
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : "Не удалось выполнить анализ."
   } finally {
@@ -64,16 +59,12 @@ async function browseCurrent() {
 async function browseExport() {
   errorMessage.value = ""
   try {
-    const fallbackName =
-      exportPath.value.trim() ||
-      currentPath.value.replace(/\.dbf$/i, "_analysis.xlsx") ||
-      "report.xlsx"
+    const fallbackName = currentPath.value.replace(/\.dbf$/i, "_analysis.xlsx") || "report.xlsx"
     const path = await pickExportPath(fallbackName)
-    if (path) {
-      exportPath.value = path
-    }
+    return path
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : "Не удалось выбрать путь сохранения."
+    return ""
   }
 }
 
@@ -85,14 +76,15 @@ async function runExport() {
     errorMessage.value = "Сначала выполните анализ."
     return
   }
-  if (!exportPath.value.trim()) {
-    errorMessage.value = "Укажите путь для сохранения XLSX."
+
+  const savePath = await browseExport()
+  if (!savePath) {
     return
   }
 
   isExporting.value = true
   try {
-    const result = await exportAnalysisXLSX(report.value, exportPath.value)
+    const result = await exportAnalysisXLSX(report.value, savePath)
     successMessage.value = `Отчёт сохранён: ${result.path}`
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : "Не удалось сохранить отчёт."
@@ -110,208 +102,320 @@ async function pickDBFFileSafe() {
     return ""
   }
 }
-
-const tariffRows = computed(() =>
-  report.value?.tariffChanges.map((item) => [
-    item.vidUsl,
-    item.nameUsl,
-    item.previousTariff,
-    item.currentTariff,
-  ]) ?? [],
-)
-
-const houseRows = computed(() =>
-  report.value?.houseChanges.map((item) => [item.type === "appeared" ? "Появился" : "Исчез", item.address]) ?? [],
-)
-
-const anomalyRows = computed(() =>
-  report.value?.anomalies.map((item) => [
-    item.vidUsl,
-    item.nameUsl,
-    item.previousAmount,
-    item.currentAmount,
-    item.deltaAmount,
-    item.deltaPercent === null ? "—" : `${item.deltaPercent.toFixed(2)}%`,
-  ]) ?? [],
-)
-
-const serviceTitleRows = computed(() =>
-  report.value?.serviceChanges.map((item) => [
-    item.type === "appeared" ? "Появилась" : "Исчезла",
-    item.vidUsl,
-    item.nameUsl,
-  ]) ?? [],
-)
 </script>
 
 <template>
   <main class="page">
-    <header class="hero">
-      <p>Сравнение начислений ЖКУ по поставщику</p>
-      <h1>DBF Compare</h1>
-      <span class="badge">MVP</span>
-    </header>
+    <section class="workspace">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Сравнение поставщика</p>
+          <h1>Анализ начислений ЖКУ</h1>
+        </div>
+      </header>
 
-    <section class="panel">
-      <FilePicker
-        v-model="previousPath"
-        label="Предыдущий месяц"
-        :disabled="isAnalyzing"
-        @browse="browsePrevious"
-      />
-      <FilePicker
-        v-model="currentPath"
-        label="Текущий месяц"
-        :disabled="isAnalyzing"
-        @browse="browseCurrent"
-      />
-      <AnalysisSettings v-model="threshold" />
-      <button type="button" :disabled="isAnalyzing" @click="runAnalysis">
-        {{ isAnalyzing ? "Сравниваем..." : "Сравнить" }}
-      </button>
-      <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
-      <p v-if="successMessage" class="success">{{ successMessage }}</p>
-      <p class="hint">
-        В dev-режиме без Wails показывается демонстрационный отчёт по тестовым DBF.
-      </p>
-    </section>
+      <section class="control-grid">
+        <article class="panel panel--wide">
+          <div class="panel-head">
+            <div>
+              <h2>Источник данных</h2>
+              <p>Пути к файлам за соседние месяцы.</p>
+            </div>
+            <span class="panel-chip">DBF</span>
+          </div>
+          <div class="panel-body panel-body--stack">
+            <FilePicker
+              v-model="previousPath"
+              label="Предыдущий месяц"
+              :disabled="isAnalyzing"
+              @browse="browsePrevious"
+            />
+            <FilePicker
+              v-model="currentPath"
+              label="Текущий месяц"
+              :disabled="isAnalyzing"
+              @browse="browseCurrent"
+            />
+          </div>
+        </article>
 
-    <section v-if="report" class="results">
-      <section class="meta">
-        <div>
-          <span>Поставщик</span>
-          <strong>{{ report.meta.providerName }}</strong>
-        </div>
-        <div>
-          <span>Период</span>
-          <strong>{{ report.meta.previousMonth }} -> {{ report.meta.currentMonth }}</strong>
-        </div>
-        <div>
-          <span>Записей</span>
-          <strong>{{ report.meta.previousRecords }} -> {{ report.meta.currentRecords }}</strong>
-        </div>
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Параметры анализа</h2>
+              <p>Порог для выявления отклонений.</p>
+            </div>
+            <span class="panel-chip">{{ threshold }}%</span>
+          </div>
+          <div class="panel-body panel-body--stack">
+            <AnalysisSettings v-model="threshold" />
+            <div class="threshold-preview">
+              <span>Текущий порог аномалий</span>
+              <strong>{{ threshold }}%</strong>
+            </div>
+            <button class="primary-button" type="button" :disabled="isAnalyzing" @click="runAnalysis">
+              {{ isAnalyzing ? "Идёт анализ..." : "Запустить анализ" }}
+            </button>
+          </div>
+        </article>
       </section>
 
-      <SummaryCards :summary="report.summary" />
-      <section class="export-panel">
-        <FilePicker
-          v-model="exportPath"
-          label="Путь для XLSX"
-          button-label="Выбрать"
-          :disabled="isExporting"
-          @browse="browseExport"
-        />
-        <button type="button" :disabled="isExporting" @click="runExport">
-          {{ isExporting ? "Сохраняем..." : "Сохранить XLSX" }}
-        </button>
+      <section class="messages" v-if="errorMessage || successMessage">
+        <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
+        <p v-if="successMessage" class="success">{{ successMessage }}</p>
       </section>
-      <DetailsSection title="Тарифы" :columns="['VID_USL', 'NAME_USL', 'Было', 'Стало']" :rows="tariffRows" />
-      <DetailsSection title="Услуги" :columns="['Тип', 'VID_USL', 'NAME_USL']" :rows="serviceTitleRows" />
-      <DetailsSection title="Дома" :columns="['Тип', 'Адрес']" :rows="houseRows" />
-      <DetailsSection title="Аномалии" :columns="['VID_USL', 'NAME_USL', 'Было', 'Стало', 'Дельта', 'Дельта %']" :rows="anomalyRows" />
+
+      <section v-if="report" class="results">
+        <section class="meta-row">
+          <article class="meta-card">
+            <span>Поставщик</span>
+            <strong>{{ report.meta.providerName }}</strong>
+          </article>
+          <article class="meta-card">
+            <span>Период анализа</span>
+            <strong>{{ report.meta.previousMonth }} → {{ report.meta.currentMonth }}</strong>
+          </article>
+          <article class="meta-card">
+            <span>Объём записей</span>
+            <strong>{{ report.meta.previousRecords }} → {{ report.meta.currentRecords }}</strong>
+          </article>
+        </section>
+
+        <SummaryCards :summary="report.summary" />
+
+        <section class="panel export-panel">
+          <div class="panel-head">
+            <div>
+              <h2>Экспорт отчёта</h2>
+              <p>Подробности по адресам, услугам и аномалиям сохраняются только в XLSX.</p>
+            </div>
+            <span class="panel-chip">XLSX</span>
+          </div>
+          <div class="export-layout export-layout--single">
+            <button class="primary-button" type="button" :disabled="isExporting" @click="runExport">
+              {{ isExporting ? "Сохраняем..." : "Сохранить отчёт в XLSX" }}
+            </button>
+          </div>
+        </section>
+      </section>
     </section>
   </main>
 </template>
 
 <style scoped>
 .page {
-  background:
-    radial-gradient(circle at top left, rgba(183, 149, 84, 0.35), transparent 28rem),
-    linear-gradient(180deg, #f9f6ef 0%, #efe7d6 100%);
-  color: #28231b;
-  font-family: Georgia, "Times New Roman", serif;
+  background: #f6f6f5;
+  color: #121212;
+  display: block;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  font-size: 14px;
   min-height: 100vh;
-  padding: 2rem;
-}
-
-.hero {
-  margin-bottom: 1.5rem;
-}
-
-.hero p {
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.hero h1 {
-  font-size: clamp(2.5rem, 5vw, 4rem);
-  margin: 0.25rem 0 0;
-}
-
-.badge {
-  background: rgba(145, 109, 43, 0.12);
-  border: 1px solid rgba(145, 109, 43, 0.18);
-  border-radius: 999px;
-  display: inline-block;
-  margin-top: 1rem;
-  padding: 0.3rem 0.7rem;
-}
-
-.panel,
-.results {
-  display: grid;
-  gap: 1rem;
-}
-
-.panel {
-  background: rgba(255, 252, 245, 0.82);
-  border: 1px solid rgba(120, 95, 49, 0.15);
-  border-radius: 20px;
-  margin-bottom: 1.5rem;
-  padding: 1.25rem;
-}
-
-.meta,
-.export-panel {
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-}
-
-.meta div {
-  background: rgba(255, 252, 245, 0.7);
-  border: 1px solid rgba(120, 95, 49, 0.12);
-  border-radius: 16px;
   padding: 1rem;
 }
 
-.meta span {
-  color: #6b5a3c;
-  display: block;
-  font-size: 0.92rem;
+.workspace,
+.results {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0 auto;
+  max-width: 1200px;
 }
 
-.meta strong {
+.topbar {
+  align-items: start;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 28px;
   display: block;
-  font-size: 1.1rem;
-  margin-top: 0.2rem;
+  padding: 1.1rem 1.2rem;
 }
 
-button {
-  background: #916d2b;
+.eyebrow {
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  margin: 0 0 0.3rem;
+  text-transform: uppercase;
+}
+
+.topbar h1 {
+  font-size: clamp(1.6rem, 3vw, 2rem);
+  margin: 0;
+}
+
+.control-grid,
+.meta-row {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.panel,
+.meta-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 20px;
+  box-shadow: 0 4px 16px rgba(28, 23, 17, 0.03);
+}
+
+.control-grid {
+  grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.55fr);
+}
+
+.panel {
+  padding: 0.95rem 1rem;
+}
+
+.panel--wide {
+  min-width: 0;
+}
+
+.panel-head {
+  align-items: start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-bottom: 0.7rem;
+}
+
+.panel-head h2 {
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.panel-head p {
+  font-size: 0.88rem;
+  margin: 0.25rem 0 0;
+}
+
+.panel-chip {
+  background: #f3f3f3;
+  border-radius: 999px;
+  color: #5d5d5d;
+  font-size: 0.78rem;
+  padding: 0.35rem 0.7rem;
+}
+
+.panel-body {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.panel-body--stack {
+  grid-template-columns: 1fr;
+}
+
+.threshold-preview {
+  align-items: end;
+  background: #f7f7f7;
+  border-radius: 16px;
+  display: flex;
+  justify-content: space-between;
+  padding: 0.75rem 0.85rem;
+}
+
+.threshold-preview span {
+  color: #7a7a7a;
+}
+
+.threshold-preview strong {
+  font-size: 1.45rem;
+}
+
+.primary-button {
+  background: #1f1f1f;
   border: 0;
-  border-radius: 10px;
-  color: #fffdf7;
+  border-radius: 999px;
+  color: #ffffff;
   cursor: pointer;
-  padding: 0.85rem 1.2rem;
+  min-height: 2.9rem;
+  padding: 0.75rem 1.15rem;
 }
 
-button:disabled {
+.primary-button:disabled {
   cursor: progress;
   opacity: 0.7;
 }
 
+.messages {
+  display: grid;
+  gap: 0.5rem;
+}
+
 .error {
-  color: #9f2a1f;
+  background: #fff1f2;
+  border: 1px solid #ffd5da;
+  border-radius: 18px;
+  color: #a52e43;
+  margin: 0;
+  padding: 0.9rem 1rem;
 }
 
 .success {
-  color: #24633d;
+  background: #effcf3;
+  border: 1px solid #cdeed5;
+  border-radius: 18px;
+  color: #2e7750;
+  margin: 0;
+  padding: 0.9rem 1rem;
 }
 
 .hint {
-  color: #6b5a3c;
-  font-size: 0.92rem;
   margin: 0;
+}
+
+.meta-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.meta-card {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.8rem 0.9rem;
+}
+
+.meta-card span {
+  color: #7a7a7a;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.meta-card strong {
+  font-size: 1.1rem;
+}
+
+.export-layout {
+  align-items: end;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.export-layout--single {
+  grid-template-columns: 1fr;
+}
+
+.details-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 1200px) {
+  .control-grid,
+  .meta-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .topbar {
+    flex-direction: column;
+  }
+
+  .panel-body {
+    grid-template-columns: 1fr;
+  }
+
+  .export-layout {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

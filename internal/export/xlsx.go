@@ -14,13 +14,15 @@ import (
 )
 
 type sheet struct {
-	Name string
-	Rows [][]cell
+	Name   string
+	Rows   [][]cell
+	Widths []float64
 }
 
 type cell struct {
 	Value  string
 	Number bool
+	Style  int
 }
 
 func WriteAnalysisXLSX(path string, report domain.AnalysisReport) error {
@@ -88,15 +90,16 @@ func buildSheets(report domain.AnalysisReport) []sheet {
 			{{Value: "Исчезло домов"}, {Value: strconv.Itoa(report.Summary.DisappearedHouses), Number: true}},
 			{{Value: "Аномалий"}, {Value: strconv.Itoa(report.Summary.Anomalies), Number: true}},
 		},
+		Widths: []float64{34, 18},
 	}
 
 	tariffs := sheet{
-		Name: "Тарифы",
-		Rows: [][]cell{{{Value: "VID_USL"}, {Value: "NAME_USL"}, {Value: "Тариф был"}, {Value: "Тариф стал"}}},
+		Name:   "Тарифы",
+		Rows:   [][]cell{{{Value: "Услуга"}, {Value: "Тариф был"}, {Value: "Тариф стал"}}},
+		Widths: []float64{68, 16, 16},
 	}
 	for _, item := range report.TariffChanges {
 		tariffs.Rows = append(tariffs.Rows, []cell{
-			{Value: item.VidUsl},
 			{Value: item.NameUsl},
 			{Value: formatFloat(item.PreviousTariff), Number: true},
 			{Value: formatFloat(item.CurrentTariff), Number: true},
@@ -104,45 +107,51 @@ func buildSheets(report domain.AnalysisReport) []sheet {
 	}
 
 	services := sheet{
-		Name: "Услуги",
-		Rows: [][]cell{{{Value: "Тип"}, {Value: "VID_USL"}, {Value: "NAME_USL"}}},
+		Name:   "Услуги",
+		Rows:   [][]cell{{{Value: "Тип"}, {Value: "Услуга"}, {Value: "Адреса домов"}}},
+		Widths: []float64{16, 58, 70},
 	}
 	for _, item := range report.ServiceChanges {
 		services.Rows = append(services.Rows, []cell{
-			{Value: item.Type},
-			{Value: item.VidUsl},
+			{Value: russianChangeType(item.Type)},
 			{Value: item.NameUsl},
+			{Value: strings.Join(item.HouseAddresses, "\n"), Style: 1},
 		})
 	}
 
 	houses := sheet{
-		Name: "Дома",
-		Rows: [][]cell{{{Value: "Тип"}, {Value: "Адрес"}}},
+		Name:   "Дома",
+		Rows:   [][]cell{{{Value: "Тип"}, {Value: "Адрес"}, {Value: "Услуги"}}},
+		Widths: []float64{16, 42, 70},
 	}
 	for _, item := range report.HouseChanges {
+		serviceNames := make([]string, 0, len(item.Services))
+		for _, service := range item.Services {
+			serviceNames = append(serviceNames, service.NameUsl)
+		}
 		houses.Rows = append(houses.Rows, []cell{
-			{Value: item.Type},
+			{Value: russianChangeType(item.Type)},
 			{Value: item.Address},
+			{Value: strings.Join(serviceNames, "\n"), Style: 1},
 		})
 	}
 
 	anomalies := sheet{
-		Name: "Аномалии",
-		Rows: [][]cell{{{Value: "VID_USL"}, {Value: "NAME_USL"}, {Value: "Предыдущая сумма"}, {Value: "Текущая сумма"}, {Value: "Изменение"}, {Value: "Изменение %"}, {Value: "Порог %"}}},
+		Name:   "Аномалии",
+		Rows:   [][]cell{{{Value: "Адрес"}, {Value: "Услуга"}, {Value: "Было"}, {Value: "Стало"}, {Value: "% изменения"}}},
+		Widths: []float64{42, 58, 18, 18, 18},
 	}
 	for _, item := range report.Anomalies {
 		deltaPercent := ""
 		if item.DeltaPercent != nil {
-			deltaPercent = formatFloat(*item.DeltaPercent)
+			deltaPercent = strconv.FormatFloat(*item.DeltaPercent, 'f', 2, 64)
 		}
 		anomalies.Rows = append(anomalies.Rows, []cell{
-			{Value: item.VidUsl},
+			{Value: item.Address},
 			{Value: item.NameUsl},
 			{Value: formatFloat(item.PreviousAmount), Number: true},
 			{Value: formatFloat(item.CurrentAmount), Number: true},
-			{Value: formatFloat(item.DeltaAmount), Number: true},
 			{Value: deltaPercent, Number: deltaPercent != ""},
-			{Value: formatFloat(item.ThresholdPercent), Number: true},
 		})
 	}
 
@@ -245,11 +254,18 @@ func workbookRelsXML(sheetCount int) string {
 func stylesXML() string {
 	return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
+  <fonts count="2">
+    <font><sz val="11"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><name val="Calibri"/></font>
+  </fonts>
   <fills count="1"><fill><patternFill patternType="none"/></fill></fills>
   <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
+  <cellXfs count="3">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+  </cellXfs>
   <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`
 }
@@ -257,12 +273,20 @@ func stylesXML() string {
 func worksheetXML(sheet sheet) string {
 	var builder strings.Builder
 	builder.WriteString(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`)
-	builder.WriteString(`<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>`)
+	builder.WriteString(`<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">`)
+	if len(sheet.Widths) > 0 {
+		builder.WriteString(`<cols>`)
+		for index, width := range sheet.Widths {
+			builder.WriteString(fmt.Sprintf(`<col min="%d" max="%d" width="%g" customWidth="1"/>`, index+1, index+1, width))
+		}
+		builder.WriteString(`</cols>`)
+	}
+	builder.WriteString(`<sheetData>`)
 	for rowIndex, row := range sheet.Rows {
 		builder.WriteString(fmt.Sprintf(`<row r="%d">`, rowIndex+1))
 		for colIndex, c := range row {
 			ref := cellRef(colIndex+1, rowIndex+1)
-			builder.WriteString(cellXML(ref, c))
+			builder.WriteString(cellXML(ref, headerCell(c, rowIndex)))
 		}
 		builder.WriteString(`</row>`)
 	}
@@ -270,16 +294,27 @@ func worksheetXML(sheet sheet) string {
 	return builder.String()
 }
 
+func headerCell(c cell, rowIndex int) cell {
+	if rowIndex == 0 && c.Style == 0 {
+		c.Style = 2
+	}
+	return c
+}
+
 func cellXML(ref string, c cell) string {
+	styleAttr := ""
+	if c.Style > 0 {
+		styleAttr = fmt.Sprintf(` s="%d"`, c.Style)
+	}
 	if c.Number {
-		return fmt.Sprintf(`<c r="%s"><v>%s</v></c>`, ref, xmlEscape(c.Value))
+		return fmt.Sprintf(`<c r="%s"%s><v>%s</v></c>`, ref, styleAttr, xmlEscape(c.Value))
 	}
 
 	var buffer bytes.Buffer
 	encoder := xml.NewEncoder(&buffer)
 	_ = encoder.EncodeToken(xml.CharData([]byte(c.Value)))
 	_ = encoder.Flush()
-	return fmt.Sprintf(`<c r="%s" t="inlineStr"><is><t>%s</t></is></c>`, ref, strings.TrimSpace(buffer.String()))
+	return fmt.Sprintf(`<c r="%s"%s t="inlineStr"><is><t xml:space="preserve">%s</t></is></c>`, ref, styleAttr, strings.TrimSpace(buffer.String()))
 }
 
 func cellRef(col int, row int) string {
@@ -306,4 +341,15 @@ func xmlEscape(value string) string {
 
 func formatFloat(value float64) string {
 	return strconv.FormatFloat(value, 'f', -1, 64)
+}
+
+func russianChangeType(value string) string {
+	switch value {
+	case "appeared":
+		return "Появилась"
+	case "disappeared":
+		return "Исчезла"
+	default:
+		return value
+	}
 }
