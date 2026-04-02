@@ -46,7 +46,7 @@ export type ServiceRef = {
 }
 
 export type HouseChange = {
-  type: "appeared" | "disappeared"
+  type: "appeared" | "disappeared" | "disappeared_service_count"
   houseKey: string
   address: string
   services: ServiceRef[]

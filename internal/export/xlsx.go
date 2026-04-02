@@ -17,12 +17,20 @@ type sheet struct {
 	Name   string
 	Rows   [][]cell
 	Widths []float64
+	Merges []mergeRef
 }
 
 type cell struct {
 	Value  string
 	Number bool
 	Style  int
+}
+
+type mergeRef struct {
+	StartCol int
+	StartRow int
+	EndCol   int
+	EndRow   int
 }
 
 func WriteAnalysisXLSX(path string, report domain.AnalysisReport) error {
@@ -112,11 +120,30 @@ func buildSheets(report domain.AnalysisReport) []sheet {
 		Widths: []float64{16, 58, 70},
 	}
 	for _, item := range report.ServiceChanges {
-		services.Rows = append(services.Rows, []cell{
-			{Value: russianChangeType(item.Type)},
-			{Value: item.NameUsl},
-			{Value: strings.Join(item.HouseAddresses, "\n"), Style: 1},
-		})
+		startRow := len(services.Rows) + 1
+		addresses := item.HouseAddresses
+		if len(addresses) == 0 {
+			addresses = []string{""}
+		}
+		for index, address := range addresses {
+			row := []cell{
+				{Value: "", Style: 3},
+				{Value: "", Style: 3},
+				{Value: address, Style: 3},
+			}
+			if index == 0 {
+				row[0] = cell{Value: russianChangeType(item.Type), Style: 3}
+				row[1] = cell{Value: item.NameUsl, Style: 3}
+			}
+			services.Rows = append(services.Rows, row)
+		}
+		endRow := len(services.Rows)
+		if endRow > startRow {
+			services.Merges = append(services.Merges,
+				mergeRef{StartCol: 1, StartRow: startRow, EndCol: 1, EndRow: endRow},
+				mergeRef{StartCol: 2, StartRow: startRow, EndCol: 2, EndRow: endRow},
+			)
+		}
 	}
 
 	houses := sheet{
@@ -129,11 +156,29 @@ func buildSheets(report domain.AnalysisReport) []sheet {
 		for _, service := range item.Services {
 			serviceNames = append(serviceNames, service.NameUsl)
 		}
-		houses.Rows = append(houses.Rows, []cell{
-			{Value: russianChangeType(item.Type)},
-			{Value: item.Address},
-			{Value: strings.Join(serviceNames, "\n"), Style: 1},
-		})
+		startRow := len(houses.Rows) + 1
+		if len(serviceNames) == 0 {
+			serviceNames = []string{""}
+		}
+		for index, serviceName := range serviceNames {
+			row := []cell{
+				{Value: "", Style: 3},
+				{Value: "", Style: 3},
+				{Value: serviceName, Style: 3},
+			}
+			if index == 0 {
+				row[0] = cell{Value: russianChangeType(item.Type), Style: 3}
+				row[1] = cell{Value: item.Address, Style: 3}
+			}
+			houses.Rows = append(houses.Rows, row)
+		}
+		endRow := len(houses.Rows)
+		if endRow > startRow {
+			houses.Merges = append(houses.Merges,
+				mergeRef{StartCol: 1, StartRow: startRow, EndCol: 1, EndRow: endRow},
+				mergeRef{StartCol: 2, StartRow: startRow, EndCol: 2, EndRow: endRow},
+			)
+		}
 	}
 
 	anomalies := sheet{
@@ -258,13 +303,25 @@ func stylesXML() string {
     <font><sz val="11"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><name val="Calibri"/></font>
   </fonts>
-  <fills count="1"><fill><patternFill patternType="none"/></fill></fills>
-  <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+  <fills count="3">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFF3F3F3"/><bgColor indexed="64"/></patternFill></fill>
+  </fills>
+  <borders count="2">
+    <border><left/><right/><top/><bottom/><diagonal/></border>
+    <border>
+      <left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/><diagonal/>
+    </border>
+  </borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="3">
+  <cellXfs count="6">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>
     <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment vertical="top" horizontal="right"/></xf>
   </cellXfs>
   <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`
@@ -290,13 +347,29 @@ func worksheetXML(sheet sheet) string {
 		}
 		builder.WriteString(`</row>`)
 	}
-	builder.WriteString(`</sheetData></worksheet>`)
+	builder.WriteString(`</sheetData>`)
+	if len(sheet.Merges) > 0 {
+		builder.WriteString(fmt.Sprintf(`<mergeCells count="%d">`, len(sheet.Merges)))
+		for _, merge := range sheet.Merges {
+			builder.WriteString(fmt.Sprintf(`<mergeCell ref="%s:%s"/>`, cellRef(merge.StartCol, merge.StartRow), cellRef(merge.EndCol, merge.EndRow)))
+		}
+		builder.WriteString(`</mergeCells>`)
+	}
+	builder.WriteString(`</worksheet>`)
 	return builder.String()
 }
 
 func headerCell(c cell, rowIndex int) cell {
-	if rowIndex == 0 && c.Style == 0 {
-		c.Style = 2
+	if rowIndex == 0 {
+		c.Style = 4
+		return c
+	}
+	if c.Style == 0 {
+		if c.Number {
+			c.Style = 5
+		} else {
+			c.Style = 3
+		}
 	}
 	return c
 }
@@ -349,6 +422,8 @@ func russianChangeType(value string) string {
 		return "Появилась"
 	case "disappeared":
 		return "Исчезла"
+	case "disappeared_service_count":
+		return "Исчесзла (кол-во услуг)"
 	default:
 		return value
 	}

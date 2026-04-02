@@ -45,6 +45,7 @@ type HouseAggregate struct {
 	HouseKey     string
 	Address      string
 	TotalAccrual float64
+	ServiceCount int
 	Services     map[string]ServiceRef
 }
 

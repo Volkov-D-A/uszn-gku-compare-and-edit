@@ -3,9 +3,14 @@ package compare
 import (
 	"math"
 	"slices"
+	"strconv"
+	"strings"
+	"unicode"
 
 	"uszn-gku-compare-and-edit/internal/domain"
 )
+
+const houseDisappearedByServiceCount = "disappeared_service_count"
 
 func Snapshots(prev domain.ProviderSnapshot, curr domain.ProviderSnapshot, settings domain.AnalysisSettings) domain.AnalysisReport {
 	report := domain.AnalysisReport{
@@ -81,7 +86,17 @@ func Snapshots(prev domain.ProviderSnapshot, curr domain.ProviderSnapshot, setti
 	}
 
 	for key, prevHouse := range prev.Houses {
-		if _, ok := curr.Houses[key]; ok {
+		currHouse, ok := curr.Houses[key]
+		if ok {
+			if !houseServicesDroppedToThreshold(prevHouse, currHouse) {
+				continue
+			}
+			report.HouseChanges = append(report.HouseChanges, domain.HouseChange{
+				Type:     houseDisappearedByServiceCount,
+				HouseKey: key,
+				Address:  prevHouse.Address,
+				Services: sortedServices(prevHouse.Services),
+			})
 			continue
 		}
 		report.HouseChanges = append(report.HouseChanges, domain.HouseChange{
@@ -168,13 +183,29 @@ func fillSummary(report *domain.AnalysisReport) {
 		if change.Type == "appeared" {
 			report.Summary.AppearedHouses++
 		}
-		if change.Type == "disappeared" {
+		if change.Type == "disappeared" || change.Type == houseDisappearedByServiceCount {
 			report.Summary.DisappearedHouses++
 		}
 	}
 
 	report.Summary.TariffChanges = len(report.TariffChanges)
 	report.Summary.Anomalies = len(report.Anomalies)
+}
+
+func houseServicesDroppedToThreshold(prev domain.HouseAggregate, curr domain.HouseAggregate) bool {
+	prevCount := prev.ServiceCount
+	if prevCount == 0 {
+		prevCount = len(prev.Services)
+	}
+	if prevCount == 0 {
+		return false
+	}
+
+	currCount := curr.ServiceCount
+	if currCount == 0 {
+		currCount = len(curr.Services)
+	}
+	return currCount*5 <= prevCount
 }
 
 func sortReport(report *domain.AnalysisReport) {
@@ -205,9 +236,33 @@ func sortedHouseAddresses(addresses map[string]string) []string {
 	if len(addresses) == 0 {
 		return []string{}
 	}
-	values := make([]string, 0, len(addresses))
+	grouped := make(map[string]map[string]struct{}, len(addresses))
+	singletons := make(map[string]struct{})
 	for _, address := range addresses {
+		street, house, ok := splitHouseAddress(address)
+		if !ok {
+			singletons[address] = struct{}{}
+			continue
+		}
+		houses := grouped[street]
+		if houses == nil {
+			houses = map[string]struct{}{}
+			grouped[street] = houses
+		}
+		houses[house] = struct{}{}
+	}
+
+	values := make([]string, 0, len(singletons)+len(grouped))
+	for address := range singletons {
 		values = append(values, address)
+	}
+	for street, houses := range grouped {
+		houseValues := make([]string, 0, len(houses))
+		for house := range houses {
+			houseValues = append(houseValues, house)
+		}
+		slices.SortFunc(houseValues, compareHouseLabels)
+		values = append(values, street+", д. "+strings.Join(houseValues, ", "))
 	}
 	slices.Sort(values)
 	return values
@@ -235,6 +290,60 @@ func compareStrings(a, b string) int {
 		return 1
 	}
 	return 0
+}
+
+func splitHouseAddress(address string) (string, string, bool) {
+	const marker = ", д. "
+
+	index := strings.Index(address, marker)
+	if index < 0 {
+		return "", "", false
+	}
+
+	street := strings.TrimSpace(address[:index])
+	house := strings.TrimSpace(address[index+len(marker):])
+	if street == "" || house == "" {
+		return "", "", false
+	}
+
+	house = strings.ReplaceAll(house, ", корп. ", " корп. ")
+	return street, house, true
+}
+
+func compareHouseLabels(a, b string) int {
+	aNumber, aRest, aHasNumber := splitLeadingNumber(a)
+	bNumber, bRest, bHasNumber := splitLeadingNumber(b)
+
+	if aHasNumber && bHasNumber && aNumber != bNumber {
+		if aNumber < bNumber {
+			return -1
+		}
+		return 1
+	}
+	if aHasNumber != bHasNumber {
+		if aHasNumber {
+			return -1
+		}
+		return 1
+	}
+	return compareStrings(aRest, bRest)
+}
+
+func splitLeadingNumber(value string) (int, string, bool) {
+	value = strings.TrimSpace(value)
+	end := 0
+	for end < len(value) && unicode.IsDigit(rune(value[end])) {
+		end++
+	}
+	if end == 0 {
+		return 0, value, false
+	}
+
+	number, err := strconv.Atoi(value[:end])
+	if err != nil {
+		return 0, value, false
+	}
+	return number, strings.TrimSpace(value[end:]), true
 }
 
 func firstNonEmpty(values ...string) string {

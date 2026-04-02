@@ -27,7 +27,8 @@ const cards = [
 .grid {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  width: 100%;
 }
 
 .card {
@@ -37,6 +38,7 @@ const cards = [
   display: grid;
   gap: 0.25rem;
   min-height: 6.5rem;
+  min-width: 0;
   padding: 0.9rem 1rem;
 }
 
@@ -49,5 +51,23 @@ strong {
   display: block;
   font-size: 1.7rem;
   line-height: 1;
+}
+
+@media (max-width: 1100px) {
+  .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

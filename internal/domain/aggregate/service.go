@@ -46,6 +46,7 @@ func BuildSnapshot(records []domain.ChargeRecord) domain.ProviderSnapshot {
 			}
 		}
 		house.TotalAccrual += record.Nachisl
+		house.ServiceCount++
 		house.Services[serviceKey] = domain.ServiceRef{
 			ServiceKey: serviceKey,
 			VidUsl:     record.VidUsl,

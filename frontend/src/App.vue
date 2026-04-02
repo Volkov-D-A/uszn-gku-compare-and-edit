@@ -219,6 +219,7 @@ async function pickDBFFileSafe() {
   gap: 0.75rem;
   margin: 0 auto;
   max-width: 1200px;
+  width: 100%;
 }
 
 .topbar {
@@ -364,12 +365,13 @@ async function pickDBFFileSafe() {
 }
 
 .meta-row {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
 }
 
 .meta-card {
   display: grid;
   gap: 0.3rem;
+  min-width: 0;
   padding: 0.8rem 0.9rem;
 }
 
@@ -381,6 +383,10 @@ async function pickDBFFileSafe() {
 
 .meta-card strong {
   font-size: 1.1rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .export-layout {

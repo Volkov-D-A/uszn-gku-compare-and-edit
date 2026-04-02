@@ -103,32 +103,41 @@ func parseRow(raw []byte, fields []fieldDescriptor) map[string]string {
 }
 
 func mapChargeRecord(row map[string]string) (domain.ChargeRecord, error) {
-	tarif, err := parseNumber(row["TARIF"])
+	tarif, err := parseNumber(fieldValue(row, "TARIF"))
 	if err != nil {
 		return domain.ChargeRecord{}, fmt.Errorf("parse TARIF: %w", err)
 	}
-	nachisl, err := parseNumber(row["NACHISL"])
+	nachisl, err := parseNumber(fieldValue(row, "NACHISL"))
 	if err != nil {
 		return domain.ChargeRecord{}, fmt.Errorf("parse NACHISL: %w", err)
 	}
 
 	return domain.ChargeRecord{
-		Postav:   row["POSTAV"],
-		Lshet:    row["LSCHET"],
-		YearS:    row["YEAR_S"],
-		MonthS:   row["MONTH_S"],
-		VidUsl:   row["VID_USL"],
-		NameUsl:  row["NAME_USL"],
-		FiasDom:  row["FIAS_DOM"],
-		City:     row["CITY"],
-		SocrCity: row["SOCR_CITY"],
-		Street:   row["STREET"],
-		SocrStr:  row["SOCR_STR"],
-		Dom:      row["DOM"],
-		Korp:     row["KORP"],
+		Postav:   fieldValue(row, "POSTAV"),
+		Lshet:    fieldValue(row, "LSCHET", "LSHET"),
+		YearS:    fieldValue(row, "YEAR_S"),
+		MonthS:   fieldValue(row, "MONTH_S"),
+		VidUsl:   fieldValue(row, "VID_USL"),
+		NameUsl:  fieldValue(row, "NAME_USL"),
+		FiasDom:  fieldValue(row, "FIAS_DOM"),
+		City:     fieldValue(row, "CITY"),
+		SocrCity: fieldValue(row, "SOCR_CITY", "SOCR_CIT"),
+		Street:   fieldValue(row, "STREET"),
+		SocrStr:  fieldValue(row, "SOCR_STR"),
+		Dom:      fieldValue(row, "DOM"),
+		Korp:     fieldValue(row, "KORP"),
 		Tarif:    tarif,
 		Nachisl:  nachisl,
 	}, nil
+}
+
+func fieldValue(row map[string]string, names ...string) string {
+	for _, name := range names {
+		if value, ok := row[name]; ok {
+			return value
+		}
+	}
+	return ""
 }
 
 func parseNumber(raw string) (float64, error) {
