@@ -58,6 +58,20 @@ export async function pickDBFFile(): Promise<string> {
   throw new Error("Wails bridge is not connected.")
 }
 
+export async function pickCSVFile(): Promise<string> {
+  const backend = getBackend()
+  if (backend) {
+    return backend.PickCSVFile()
+  }
+
+  if (import.meta.env.DEV) {
+    await wait(50)
+    return ""
+  }
+
+  throw new Error("Wails bridge is not connected.")
+}
+
 export async function pickExportPath(defaultName: string): Promise<string> {
   const backend = getBackend()
   if (backend) {
@@ -67,6 +81,37 @@ export async function pickExportPath(defaultName: string): Promise<string> {
   if (import.meta.env.DEV) {
     await wait(50)
     return defaultName
+  }
+
+  throw new Error("Wails bridge is not connected.")
+}
+
+export async function pickDBFExportPath(defaultName: string): Promise<string> {
+  const backend = getBackend()
+  if (backend) {
+    return backend.PickDBFExportPath(defaultName)
+  }
+
+  if (import.meta.env.DEV) {
+    await wait(50)
+    return defaultName
+  }
+
+  throw new Error("Wails bridge is not connected.")
+}
+
+export async function convertNovatekCSVToDBF(
+  csvPath: string,
+  savePath: string,
+): Promise<ExportResult> {
+  const backend = getBackend()
+  if (backend) {
+    return backend.ConvertNovatekCSVToDBF(csvPath, savePath)
+  }
+
+  if (import.meta.env.DEV) {
+    await wait(100)
+    return { path: savePath || "novatek.dbf" }
   }
 
   throw new Error("Wails bridge is not connected.")

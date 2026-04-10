@@ -13,9 +13,15 @@ declare global {
             settings: AnalysisSettings,
           ) => Promise<AnalysisReport>
           PickDBFFile: () => Promise<string>
+          PickCSVFile: () => Promise<string>
           PickExportPath: (defaultName: string) => Promise<string>
+          PickDBFExportPath: (defaultName: string) => Promise<string>
           ExportAnalysisXLSX: (
             report: AnalysisReport,
+            savePath: string,
+          ) => Promise<{ path: string }>
+          ConvertNovatekCSVToDBF: (
+            csvPath: string,
             savePath: string,
           ) => Promise<{ path: string }>
         }

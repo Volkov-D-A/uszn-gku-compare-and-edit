@@ -1,6 +1,8 @@
 package compare
 
 import (
+	"errors"
+	"os"
 	"reflect"
 	"testing"
 
@@ -12,10 +14,16 @@ import (
 func TestSnapshotsWithFixtureData(t *testing.T) {
 	prevRecords, err := dbf.ReadCharges("../../../test_data/chrg_356_92_202601.dbf")
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			t.Skip("fixture ../../../test_data/chrg_356_92_202601.dbf is not available")
+		}
 		t.Fatalf("read previous charges: %v", err)
 	}
 	currRecords, err := dbf.ReadCharges("../../../test_data/chrg_356_92_202602.dbf")
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			t.Skip("fixture ../../../test_data/chrg_356_92_202602.dbf is not available")
+		}
 		t.Fatalf("read current charges: %v", err)
 	}
 
@@ -120,10 +128,16 @@ func TestSnapshotsMarksHouseAsDisappearedWhenServicesDropToTwentyPercent(t *test
 func TestSnapshotsMarksHouseAsDisappearedWhenRecordCountDropsToTwentyPercent(t *testing.T) {
 	prevRecords, err := dbf.ReadCharges("../../../test_data/9225010000_01.dbf")
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			t.Skip("fixture ../../../test_data/9225010000_01.dbf is not available")
+		}
 		t.Fatalf("read previous charges: %v", err)
 	}
 	currRecords, err := dbf.ReadCharges("../../../test_data/9225010000_02.dbf")
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			t.Skip("fixture ../../../test_data/9225010000_02.dbf is not available")
+		}
 		t.Fatalf("read current charges: %v", err)
 	}
 

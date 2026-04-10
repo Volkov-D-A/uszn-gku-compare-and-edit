@@ -2,6 +2,7 @@
 import { ref } from "vue"
 import AnalysisSettings from "./components/AnalysisSettings.vue"
 import FilePicker from "./components/FilePicker.vue"
+import PreparationUtilities from "./components/PreparationUtilities.vue"
 import SummaryCards from "./components/SummaryCards.vue"
 import {
   analyzeSupplierFiles,
@@ -14,6 +15,7 @@ import type { AnalysisReport } from "./types/analysis"
 const previousPath = ref("")
 const currentPath = ref("")
 const threshold = ref(20)
+const isUtilitiesOpen = ref(false)
 
 const report = ref<AnalysisReport | null>(null)
 const errorMessage = ref("")
@@ -112,6 +114,7 @@ async function pickDBFFileSafe() {
           <p class="eyebrow">Сравнение поставщика</p>
           <h1>Анализ начислений ЖКУ</h1>
         </div>
+        <button class="utility-button" type="button" @click="isUtilitiesOpen = true">Утилиты</button>
       </header>
 
       <section class="control-grid">
@@ -199,6 +202,8 @@ async function pickDBFFileSafe() {
         </section>
       </section>
     </section>
+
+    <PreparationUtilities :open="isUtilitiesOpen" @close="isUtilitiesOpen = false" />
   </main>
 </template>
 
@@ -227,8 +232,22 @@ async function pickDBFFileSafe() {
   background: #ffffff;
   border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 28px;
-  display: block;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
   padding: 1.1rem 1.2rem;
+}
+
+.utility-button {
+  align-self: center;
+  background: #f1efe9;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 999px;
+  color: #1f1f1f;
+  cursor: pointer;
+  min-height: 2.8rem;
+  padding: 0.7rem 1.1rem;
+  white-space: nowrap;
 }
 
 .eyebrow {

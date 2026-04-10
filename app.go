@@ -68,6 +68,22 @@ func (a *App) PickDBFFile() (string, error) {
 	})
 }
 
+func (a *App) PickCSVFile() (string, error) {
+	if a.ctx == nil {
+		return "", fmt.Errorf("application context is not ready")
+	}
+
+	return runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Выберите CSV файл",
+		Filters: []runtime.FileFilter{
+			{
+				DisplayName: "CSV files",
+				Pattern:     "*.csv",
+			},
+		},
+	})
+}
+
 func (a *App) PickExportPath(defaultName string) (string, error) {
 	if a.ctx == nil {
 		return "", fmt.Errorf("application context is not ready")
@@ -88,4 +104,36 @@ func (a *App) PickExportPath(defaultName string) (string, error) {
 			},
 		},
 	})
+}
+
+func (a *App) PickDBFExportPath(defaultName string) (string, error) {
+	if a.ctx == nil {
+		return "", fmt.Errorf("application context is not ready")
+	}
+
+	name := filepath.Base(defaultName)
+	if filepath.Ext(name) == "" {
+		name += ".dbf"
+	}
+
+	return runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		Title:           "Сохранить DBF файл",
+		DefaultFilename: name,
+		Filters: []runtime.FileFilter{
+			{
+				DisplayName: "DBF files",
+				Pattern:     "*.dbf",
+			},
+		},
+	})
+}
+
+func (a *App) ConvertNovatekCSVToDBF(csvPath string, savePath string) (domain.ExportResult, error) {
+	if err := dbf.ConvertNovatekCSVToDBF(csvPath, savePath); err != nil {
+		return domain.ExportResult{}, fmt.Errorf("convert novatek csv to dbf: %w", err)
+	}
+
+	return domain.ExportResult{
+		Path: savePath,
+	}, nil
 }
