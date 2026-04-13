@@ -34,10 +34,10 @@ dev: frontend-install
 	wails dev
 
 build: frontend-build test
-	wails build -clean -s
+	wails build -s
 
 build-windows: frontend-build test
-	wails build -clean -s -platform windows/amd64
+	wails build -s -platform windows/amd64
 
 cli:
 	go run . --cli test_data/chrg_356_92_202601.dbf test_data/chrg_356_92_202602.dbf 20 build/report.xlsx
