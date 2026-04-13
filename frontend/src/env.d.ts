@@ -24,6 +24,15 @@ declare global {
             csvPath: string,
             savePath: string,
           ) => Promise<{ path: string }>
+          RemoveRIRZeroRows: (
+            sourcePath: string,
+            savePath: string,
+          ) => Promise<{ path: string }>
+          MergeRIRODNHotWaterRows: (
+            sourcePath: string,
+            savePath: string,
+            targetTariff: string,
+          ) => Promise<{ path: string }>
         }
       }
     }

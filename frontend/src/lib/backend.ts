@@ -117,6 +117,41 @@ export async function convertNovatekCSVToDBF(
   throw new Error("Wails bridge is not connected.")
 }
 
+export async function removeRIRZeroRows(
+  sourcePath: string,
+  savePath: string,
+): Promise<ExportResult> {
+  const backend = getBackend()
+  if (backend) {
+    return backend.RemoveRIRZeroRows(sourcePath, savePath)
+  }
+
+  if (import.meta.env.DEV) {
+    await wait(100)
+    return { path: savePath || "rir-cleaned.dbf" }
+  }
+
+  throw new Error("Wails bridge is not connected.")
+}
+
+export async function mergeRIRODNHotWaterRows(
+  sourcePath: string,
+  savePath: string,
+  targetTariff: string,
+): Promise<ExportResult> {
+  const backend = getBackend()
+  if (backend) {
+    return backend.MergeRIRODNHotWaterRows(sourcePath, savePath, targetTariff)
+  }
+
+  if (import.meta.env.DEV) {
+    await wait(100)
+    return { path: savePath || "rir-odn.dbf" }
+  }
+
+  throw new Error("Wails bridge is not connected.")
+}
+
 function wait(ms: number) {
   return new Promise<void>((resolve) => {
     window.setTimeout(resolve, ms)

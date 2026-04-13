@@ -2,8 +2,11 @@
 import { ref } from "vue"
 import {
   convertNovatekCSVToDBF,
+  mergeRIRODNHotWaterRows,
+  pickDBFFile,
   pickCSVFile,
   pickDBFExportPath,
+  removeRIRZeroRows,
 } from "../lib/backend"
 
 defineProps<{
@@ -20,7 +23,6 @@ type UtilityDefinition = {
   description: string
   inputLabel: string
   actionLabel: string
-  available: boolean
 }
 
 const utilities: UtilityDefinition[] = [
@@ -30,30 +32,32 @@ const utilities: UtilityDefinition[] = [
     description: "Преобразование CSV с заголовками в DBF для последующего сравнения.",
     inputLabel: "Исходный CSV файл",
     actionLabel: "Преобразовать в DBF",
-    available: true,
   },
   {
-    id: "transform",
-    title: "Преобразование формата",
-    description: "Отдельный сценарий для преобразования вспомогательных выгрузок в рабочий вид.",
-    inputLabel: "Файл или выгрузка",
-    actionLabel: "Запустить преобразование",
-    available: false,
+    id: "rir-zero",
+    title: "РИР нулевые",
+    description: "Удаление строк, где одновременно пусты TARIF, TARIF_DEC и NORM_USL.",
+    inputLabel: "Исходный DBF файл",
+    actionLabel: "Удалить пустые строки",
   },
   {
-    id: "batch",
-    title: "Пакетная подготовка",
-    description: "Последовательный запуск нескольких шагов подготовки перед основным сравнением.",
-    inputLabel: "Папка или набор файлов",
-    actionLabel: "Запустить пакет",
-    available: false,
+    id: "rir-odn",
+    title: "РИР ГВС ОДН",
+    description: "Перенос сумм NACHISL, KOPLATE и PERERASCH в строку ГВС: компонент на ХВ ОДН по заданному тарифу.",
+    inputLabel: "Исходный DBF файл",
+    actionLabel: "Объединить строки",
   },
 ]
 
 const novatekPath = ref("")
+const rirPath = ref("")
+const rirOdnPath = ref("")
+const rirOdnTariff = ref("32,730")
 const errorMessage = ref("")
 const successMessage = ref("")
 const isConverting = ref(false)
+const isFilteringRIR = ref(false)
+const isMergingRIRODN = ref(false)
 
 async function browseNovatekCSV() {
   errorMessage.value = ""
@@ -99,6 +103,101 @@ async function runNovatekConversion() {
     isConverting.value = false
   }
 }
+
+async function browseRIRDBF() {
+  errorMessage.value = ""
+  try {
+    const path = await pickDBFFile()
+    if (path) {
+      rirPath.value = path
+    }
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "Не удалось выбрать DBF файл."
+  }
+}
+
+async function runRIRCleanup() {
+  errorMessage.value = ""
+  successMessage.value = ""
+
+  if (!rirPath.value.trim()) {
+    errorMessage.value = "Укажите DBF файл для обработки РИР."
+    return
+  }
+
+  const defaultName = rirPath.value.replace(/\.dbf$/i, "_cleaned.dbf") || "rir_cleaned.dbf"
+  let savePath = ""
+  try {
+    savePath = await pickDBFExportPath(defaultName)
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "Не удалось выбрать путь сохранения."
+    return
+  }
+
+  if (!savePath) {
+    return
+  }
+
+  isFilteringRIR.value = true
+  try {
+    const result = await removeRIRZeroRows(rirPath.value, savePath)
+    successMessage.value = `Очищенный DBF файл сохранён: ${result.path}`
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "Не удалось удалить пустые строки."
+  } finally {
+    isFilteringRIR.value = false
+  }
+}
+
+async function browseRIRODNDBF() {
+  errorMessage.value = ""
+  try {
+    const path = await pickDBFFile()
+    if (path) {
+      rirOdnPath.value = path
+    }
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "Не удалось выбрать DBF файл."
+  }
+}
+
+async function runRIRODNMerge() {
+  errorMessage.value = ""
+  successMessage.value = ""
+
+  if (!rirOdnPath.value.trim()) {
+    errorMessage.value = "Укажите DBF файл для обработки РИР ГВС ОДН."
+    return
+  }
+
+  if (!rirOdnTariff.value.trim()) {
+    errorMessage.value = "Укажите тариф для поиска строки ГВС: компонент на ХВ ОДН."
+    return
+  }
+
+  const defaultName = rirOdnPath.value.replace(/\.dbf$/i, "_odn_merged.dbf") || "rir_odn_merged.dbf"
+  let savePath = ""
+  try {
+    savePath = await pickDBFExportPath(defaultName)
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "Не удалось выбрать путь сохранения."
+    return
+  }
+
+  if (!savePath) {
+    return
+  }
+
+  isMergingRIRODN.value = true
+  try {
+    const result = await mergeRIRODNHotWaterRows(rirOdnPath.value, savePath, rirOdnTariff.value)
+    successMessage.value = `Обработанный DBF файл сохранён: ${result.path}`
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "Не удалось объединить строки ГВС ОДН."
+  } finally {
+    isMergingRIRODN.value = false
+  }
+}
 </script>
 
 <template>
@@ -110,7 +209,7 @@ async function runNovatekConversion() {
           <p>Интерфейсная заготовка для отдельных операций перед сравнением файлов.</p>
         </div>
         <div class="modal-actions">
-          <span class="panel-chip">Скоро</span>
+          <span class="panel-chip">3 утилиты</span>
           <button class="close-button" type="button" @click="emit('close')">Закрыть</button>
         </div>
       </div>
@@ -127,42 +226,103 @@ async function runNovatekConversion() {
               <h3>{{ utility.title }}</h3>
               <p>{{ utility.description }}</p>
             </div>
-            <span class="utility-status">
-              {{ utility.available ? "Готово к использованию" : "Будет доступно после подключения backend" }}
-            </span>
           </div>
 
           <label class="utility-field">
             <span>{{ utility.inputLabel }}</span>
             <div class="utility-field__row">
               <input
-                :value="utility.id === 'novatek' ? novatekPath : ''"
+                :value="
+                  utility.id === 'novatek'
+                    ? novatekPath
+                    : utility.id === 'rir-zero'
+                      ? rirPath
+                      : utility.id === 'rir-odn'
+                        ? rirOdnPath
+                        : ''
+                "
                 type="text"
-                :disabled="utility.id !== 'novatek' || isConverting"
+                :disabled="
+                  (utility.id === 'novatek' && isConverting) ||
+                  (utility.id === 'rir-zero' && isFilteringRIR) ||
+                  (utility.id === 'rir-odn' && isMergingRIRODN) ||
+                  (utility.id !== 'novatek' && utility.id !== 'rir-zero' && utility.id !== 'rir-odn')
+                "
                 :placeholder="
                   utility.id === 'novatek'
                     ? 'Выберите CSV файл с заголовками'
+                    : utility.id === 'rir-zero'
+                      ? 'Выберите DBF файл с услугами'
+                    : utility.id === 'rir-odn'
+                      ? 'Выберите DBF файл для обработки ГВС ОДН'
                     : 'Выбор файла появится на следующем этапе'
                 "
-                @input="utility.id === 'novatek' ? (novatekPath = ($event.target as HTMLInputElement).value) : undefined"
+                @input="
+                  utility.id === 'novatek'
+                    ? (novatekPath = ($event.target as HTMLInputElement).value)
+                    : utility.id === 'rir-zero'
+                      ? (rirPath = ($event.target as HTMLInputElement).value)
+                      : utility.id === 'rir-odn'
+                        ? (rirOdnPath = ($event.target as HTMLInputElement).value)
+                    : undefined
+                "
               />
               <button
                 type="button"
-                :disabled="utility.id !== 'novatek' || isConverting"
-                @click="utility.id === 'novatek' ? browseNovatekCSV() : undefined"
+                :disabled="
+                  (utility.id === 'novatek' && isConverting) ||
+                  (utility.id === 'rir-zero' && isFilteringRIR) ||
+                  (utility.id === 'rir-odn' && isMergingRIRODN) ||
+                  (utility.id !== 'novatek' && utility.id !== 'rir-zero' && utility.id !== 'rir-odn')
+                "
+                @click="
+                  utility.id === 'novatek'
+                    ? browseNovatekCSV()
+                    : utility.id === 'rir-zero'
+                      ? browseRIRDBF()
+                      : utility.id === 'rir-odn'
+                        ? browseRIRODNDBF()
+                    : undefined
+                "
               >
                 Обзор
               </button>
             </div>
           </label>
 
+          <label v-if="utility.id === 'rir-odn'" class="utility-field">
+            <span>Тариф строки ГВС: компонент на ХВ ОДН</span>
+            <input v-model="rirOdnTariff" type="text" :disabled="isMergingRIRODN" placeholder="32,730" />
+          </label>
+
           <button
             class="secondary-button"
             type="button"
-            :disabled="utility.id !== 'novatek' || isConverting"
-            @click="utility.id === 'novatek' ? runNovatekConversion() : undefined"
+            :disabled="
+              (utility.id === 'novatek' && isConverting) ||
+              (utility.id === 'rir-zero' && isFilteringRIR) ||
+              (utility.id === 'rir-odn' && isMergingRIRODN) ||
+              (utility.id !== 'novatek' && utility.id !== 'rir-zero' && utility.id !== 'rir-odn')
+            "
+            @click="
+              utility.id === 'novatek'
+                ? runNovatekConversion()
+                : utility.id === 'rir-zero'
+                  ? runRIRCleanup()
+                  : utility.id === 'rir-odn'
+                    ? runRIRODNMerge()
+                : undefined
+            "
           >
-            {{ utility.id === "novatek" && isConverting ? "Преобразуем..." : utility.actionLabel }}
+            {{
+              utility.id === "novatek" && isConverting
+                ? "Преобразуем..."
+                : utility.id === "rir-zero" && isFilteringRIR
+                  ? "Обрабатываем..."
+                  : utility.id === "rir-odn" && isMergingRIRODN
+                    ? "Обрабатываем..."
+                  : utility.actionLabel
+            }}
           </button>
         </article>
       </div>
@@ -183,6 +343,7 @@ async function runNovatekConversion() {
 }
 
 .modal {
+  --utility-control-height: 3.1rem;
   background: #ffffff;
   border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 24px;
@@ -271,7 +432,8 @@ async function runNovatekConversion() {
   background: #faf9f7;
   border: 1px solid rgba(0, 0, 0, 0.05);
   border-radius: 18px;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 0.85rem;
   padding: 0.9rem;
 }
@@ -322,30 +484,38 @@ async function runNovatekConversion() {
 .secondary-button {
   border-radius: 16px;
   font: inherit;
+  height: var(--utility-control-height);
+  line-height: 1.2;
 }
 
 .utility-field input {
   background: #ffffff;
   border: 1px solid rgba(0, 0, 0, 0.08);
+  display: block;
   min-width: 0;
-  padding: 0.85rem 1rem;
+  padding: 0 1rem;
 }
 
 .utility-field button {
+  align-items: center;
   background: #f4f4f4;
   border: 1px solid rgba(0, 0, 0, 0.08);
   color: #1f1f1f;
-  min-height: 3.1rem;
-  padding: 0.7rem 1rem;
+  display: inline-flex;
+  justify-content: center;
+  padding: 0 1rem;
 }
 
 .secondary-button {
+  align-items: center;
   background: #eceae5;
   border: 0;
   color: #4b4b4b;
   cursor: pointer;
-  min-height: 2.9rem;
-  padding: 0.75rem 1.15rem;
+  display: inline-flex;
+  justify-content: center;
+  margin-top: auto;
+  padding: 0 1.15rem;
 }
 
 button:disabled,

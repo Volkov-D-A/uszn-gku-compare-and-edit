@@ -137,3 +137,23 @@ func (a *App) ConvertNovatekCSVToDBF(csvPath string, savePath string) (domain.Ex
 		Path: savePath,
 	}, nil
 }
+
+func (a *App) RemoveRIRZeroRows(sourcePath string, savePath string) (domain.ExportResult, error) {
+	if err := dbf.RemoveRIRZeroRows(sourcePath, savePath); err != nil {
+		return domain.ExportResult{}, fmt.Errorf("remove rir zero rows: %w", err)
+	}
+
+	return domain.ExportResult{
+		Path: savePath,
+	}, nil
+}
+
+func (a *App) MergeRIRODNHotWaterRows(sourcePath string, savePath string, targetTariff string) (domain.ExportResult, error) {
+	if err := dbf.MergeRIRODNHotWaterRows(sourcePath, savePath, targetTariff); err != nil {
+		return domain.ExportResult{}, fmt.Errorf("merge rir odn hot water rows: %w", err)
+	}
+
+	return domain.ExportResult{
+		Path: savePath,
+	}, nil
+}
